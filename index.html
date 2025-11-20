@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dad's Recorder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      /* Custom Animations for the recording pulse */
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.8);
+          opacity: 0.5;
+        }
+        100% {
+          transform: scale(1.3);
+          opacity: 0;
+        }
+      }
+      .recording-pulse::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #ef4444;
+        border-radius: 50%;
+        z-index: -1;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      }
+      /* Custom Range Slider Styling */
+      input[type="range"] {
+        -webkit-appearance: none;
+        background: transparent;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 24px;
+        width: 24px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: pointer;
+        margin-top: -10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: #cbd5e1;
+        border-radius: 2px;
+      }
+      /* Scrollbar styling for sidebar */
+      ::-webkit-scrollbar {
+        width: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f8fafc;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-slate-50 text-slate-900 font-sans h-screen flex flex-col overflow-hidden"
+  >
+    <!-- Header: Compact & Functional -->
+    <header class="bg-white shadow-sm border-b border-slate-200 flex-none z-10">
+      <div
+        class="container mx-auto px-6 py-3 flex items-center justify-between gap-4"
+      >
+        <div class="flex items-center gap-4">
+          <h1
+            class="text-2xl font-bold text-slate-800 tracking-tight hidden md:block"
+          >
+            Ken's Recorder
+          </h1>
+
+          <!-- Input Select Moved to Header -->
+          <div
+            class="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 border border-slate-200"
+          >
+            <i data-lucide="mic" class="w-4 h-4 text-slate-500"></i>
+            <select
+              id="audioSource"
+              class="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer min-w-[200px]"
+            >
+              <option value="" disabled selected>Loading microphones...</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <h1>Made with ❤️ by James (son of Ken)</h1>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <span
+            id="statusMsg"
+            class="text-xs text-slate-500 font-medium hidden sm:block"
+            >Checking audio...</span
+          >
+          <button
+            onclick="clearAllRecordings()"
+            class="text-xs text-red-400 hover:text-red-600 font-semibold uppercase tracking-wider"
+          >
+            Clear History
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content: Split Layout -->
+    <main class="flex-grow flex flex-row overflow-hidden">
+      <!-- Left Pane: Controls (Flexible, Centered) -->
+      <section
+        class="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-y-auto"
+      >
+        <div class="w-full max-w-2xl flex flex-col gap-8 items-center">
+          <!-- Visualizer & Sliders Group -->
+          <div
+            class="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-5"
+          >
+            <!-- Visualizer -->
+            <div
+              class="w-full h-32 bg-slate-900 rounded-xl overflow-hidden relative shadow-inner mb-5"
+            >
+              <canvas id="visualizer" class="w-full h-full"></canvas>
+              <div
+                class="absolute top-2 right-2 text-[10px] text-slate-500 font-mono uppercase tracking-wider"
+              >
+                Signal Monitor
+              </div>
+            </div>
+
+            <!-- Volume Controls -->
+            <div class="grid grid-cols-2 gap-8 px-2">
+              <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                  <label for="vol1" class="text-sm font-bold text-slate-600"
+                    >Input 1</label
+                  >
+                  <span
+                    id="vol1Display"
+                    class="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded"
+                    >100%</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  id="vol1"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value="1"
+                  class="w-full"
+                />
+              </div>
+              <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                  <label for="vol2" class="text-sm font-bold text-slate-600"
+                    >Input 2</label
+                  >
+                  <span
+                    id="vol2Display"
+                    class="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded"
+                    >100%</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  id="vol2"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value="1"
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- The Big Red Button -->
+          <div class="flex flex-col items-center gap-4">
+            <div class="relative">
+              <button
+                id="recordBtn"
+                class="w-40 h-40 md:w-56 md:h-56 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-xl flex flex-col items-center justify-center transition-all transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-8 focus:ring-red-200 disabled:opacity-50 disabled:cursor-not-allowed border-4 border-white ring-1 ring-slate-200"
+              >
+                <div id="btnIcon" class="mb-2 transition-all">
+                  <div class="w-6 h-6 bg-white rounded-full"></div>
+                </div>
+                <span
+                  id="btnText"
+                  class="text-2xl md:text-3xl font-bold uppercase tracking-wider"
+                  >Record</span
+                >
+                <span
+                  id="timer"
+                  class="text-lg md:text-xl font-mono mt-1 opacity-0 transition-opacity absolute -bottom-12 text-slate-700 font-bold"
+                  >00:00</span
+                >
+              </button>
+            </div>
+            <p class="text-slate-400 text-sm mt-8" id="instructionText">
+              Ready to record.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Pane: Sidebar (Fixed Width, Scrollable) -->
+      <aside
+        class="w-80 md:w-96 bg-white border-l border-slate-200 flex flex-col flex-none shadow-xl z-20"
+      >
+        <div class="p-4 border-b border-slate-100 bg-slate-50/50 backdrop-blur">
+          <h2 class="font-bold text-slate-700 flex items-center gap-2">
+            <i data-lucide="library" class="w-5 h-5"></i>
+            Recordings
+          </h2>
+        </div>
+
+        <div
+          id="recordingsList"
+          class="flex-grow overflow-y-auto p-4 flex flex-col gap-3"
+        >
+          <!-- Recordings will appear here -->
+          <div id="emptyState" class="text-center py-10 text-slate-400">
+            <i
+              data-lucide="cassette-tape"
+              class="w-12 h-12 mx-auto mb-2 opacity-50"
+            ></i>
+            <p class="text-sm">No recordings yet.</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Templates (Hidden) -->
+    <template id="recording-template">
+      <div
+        class="recording-item bg-slate-50 p-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all flex flex-col gap-3 animate-fade-in"
+        data-id=""
+      >
+        <!-- Top Row: Info -->
+        <div class="flex items-center gap-3">
+          <div
+            class="bg-white p-2 rounded-lg shadow-sm border border-slate-100 flex-none"
+          >
+            <i data-lucide="music" class="w-5 h-5 text-blue-500"></i>
+          </div>
+          <div class="flex-grow min-w-0">
+            <h3
+              class="font-semibold text-slate-800 text-sm truncate recording-name"
+            >
+              Track Name
+            </h3>
+            <p class="text-xs text-slate-500 recording-date">Date</p>
+          </div>
+          <button
+            class="delete-btn text-slate-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete"
+          >
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Bottom Row: Controls -->
+        <div class="flex gap-2">
+          <audio class="hidden" controls preload="metadata"></audio>
+          <button
+            class="play-btn flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+          >
+            <i data-lucide="play" class="w-4 h-4"></i> Play
+          </button>
+          <a
+            class="download-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer decoration-none"
+          >
+            <i data-lucide="download" class="w-4 h-4"></i> Save
+          </a>
+        </div>
+      </div>
+    </template>
+
+    <script>
+      // --- Icons Setup ---
+      lucide.createIcons();
+
+      // --- Elements ---
+      const recordBtn = document.getElementById("recordBtn");
+      const btnText = document.getElementById("btnText");
+      const btnIcon = document.getElementById("btnIcon");
+      const instructionText = document.getElementById("instructionText");
+      const audioSelect = document.getElementById("audioSource");
+      const canvas = document.getElementById("visualizer");
+      const canvasCtx = canvas.getContext("2d");
+      const statusMsg = document.getElementById("statusMsg");
+      const recordingsList = document.getElementById("recordingsList");
+      const timerDisplay = document.getElementById("timer");
+      const vol1Slider = document.getElementById("vol1");
+      const vol2Slider = document.getElementById("vol2");
+      const vol1Display = document.getElementById("vol1Display");
+      const vol2Display = document.getElementById("vol2Display");
+      const emptyState = document.getElementById("emptyState");
+
+      // --- State ---
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+      let startTime;
+      let timerInterval;
+
+      // Audio Graph
+      let audioContext;
+      let sourceNode;
+      let splitterNode;
+      let gainNode1;
+      let gainNode2;
+      let mergerNode;
+      let destinationNode;
+      let analyser;
+      let dataArray;
+      let rawStream;
+      let animationId;
+
+      // --- Database (IndexedDB) for Persistence ---
+      const DB_NAME = "GuitarRecorderDB";
+      const DB_VERSION = 1;
+      const STORE_NAME = "recordings";
+      let db;
+
+      // --- Initialization ---
+
+      async function init() {
+        await initDB();
+        await loadSavedRecordings();
+
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          statusMsg.textContent = "Mic OK";
+          statusMsg.className =
+            "text-xs text-green-600 font-bold hidden sm:block bg-green-100 px-2 py-1 rounded-full";
+
+          await getDevices();
+
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioDevices = devices.filter(
+            (device) => device.kind === "audioinput",
+          );
+          if (audioDevices.length > 0) {
+            startStream(audioDevices[0].deviceId);
+          }
+        } catch (err) {
+          console.error("Error accessing microphone:", err);
+          statusMsg.textContent = "Mic Error";
+          statusMsg.className =
+            "text-xs text-red-600 font-bold hidden sm:block bg-red-100 px-2 py-1 rounded-full";
+        }
+      }
+
+      // --- IndexedDB Functions ---
+
+      function initDB() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+              db.createObjectStore(STORE_NAME, { keyPath: "id" });
+            }
+          };
+          request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+          };
+          request.onerror = (event) => reject("DB Error");
+        });
+      }
+
+      function saveToDB(recordingObj) {
+        const transaction = db.transaction([STORE_NAME], "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        store.add(recordingObj);
+        toggleEmptyState(false);
+      }
+
+      function deleteFromDB(id) {
+        const transaction = db.transaction([STORE_NAME], "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        store.delete(id);
+
+        // Check if empty after delete
+        const countRequest = store.count();
+        countRequest.onsuccess = () => {
+          if (countRequest.result === 0) toggleEmptyState(true);
+        };
+      }
+
+      async function loadSavedRecordings() {
+        if (!db) return;
+        const transaction = db.transaction([STORE_NAME], "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const recordings = request.result;
+          if (recordings.length > 0) toggleEmptyState(false);
+
+          // Sort by date desc
+          recordings.sort((a, b) => new Date(b.date) - new Date(a.date));
+          recordings.forEach((rec) => {
+            // Reconstruct Blob URL from stored Blob
+            const url = URL.createObjectURL(rec.blob);
+            addRecordingToUI(url, rec.name, new Date(rec.date), rec.id, false);
+          });
+        };
+      }
+
+      function toggleEmptyState(isEmpty) {
+        if (isEmpty) emptyState.classList.remove("hidden");
+        else emptyState.classList.add("hidden");
+      }
+
+      window.clearAllRecordings = function () {
+        if (
+          confirm("Are you sure you want to delete ALL recordings history?")
+        ) {
+          const transaction = db.transaction([STORE_NAME], "readwrite");
+          const store = transaction.objectStore(STORE_NAME);
+          store.clear();
+          recordingsList.innerHTML = "";
+          recordingsList.appendChild(emptyState);
+          toggleEmptyState(true);
+        }
+      };
+
+      // --- Standard Logic ---
+
+      async function getDevices() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        audioSelect.innerHTML = "";
+
+        const audioDevices = devices.filter(
+          (device) => device.kind === "audioinput",
+        );
+
+        if (audioDevices.length === 0) {
+          const option = document.createElement("option");
+          option.text = "No microphones found";
+          audioSelect.appendChild(option);
+          return;
+        }
+
+        audioDevices.forEach((device) => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.text = device.label || `Microphone ${audioSelect.length + 1}`;
+          audioSelect.appendChild(option);
+        });
+      }
+
+      async function startStream(deviceId) {
+        if (rawStream) {
+          rawStream.getTracks().forEach((track) => track.stop());
+        }
+        const constraints = {
+          audio: {
+            deviceId: deviceId ? { exact: deviceId } : undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 2,
+          },
+        };
+        try {
+          rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+          setupAudioGraph(rawStream);
+        } catch (err) {
+          console.error("Error getting stream:", err);
+          statusMsg.textContent = "Connection Error";
+          statusMsg.className =
+            "text-xs text-red-600 font-bold hidden sm:block bg-red-100 px-2 py-1 rounded-full";
+        }
+      }
+
+      function setupAudioGraph(stream) {
+        if (!audioContext)
+          audioContext = new (window.AudioContext ||
+            window.webkitAudioContext)();
+
+        sourceNode = audioContext.createMediaStreamSource(stream);
+        splitterNode = audioContext.createChannelSplitter(2);
+        gainNode1 = audioContext.createGain();
+        gainNode2 = audioContext.createGain();
+        mergerNode = audioContext.createChannelMerger(2);
+        destinationNode = audioContext.createMediaStreamDestination();
+        analyser = audioContext.createAnalyser();
+
+        gainNode1.gain.value = vol1Slider.value;
+        gainNode2.gain.value = vol2Slider.value;
+
+        sourceNode.connect(splitterNode);
+        splitterNode.connect(gainNode1, 0);
+        gainNode1.connect(mergerNode, 0, 0);
+        splitterNode.connect(gainNode2, 1);
+        gainNode2.connect(mergerNode, 0, 1);
+
+        mergerNode.connect(analyser);
+        mergerNode.connect(destinationNode);
+
+        analyser.fftSize = 2048;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+
+        drawVisualizer();
+      }
+
+      function drawVisualizer() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        animationId = requestAnimationFrame(drawVisualizer);
+
+        if (!analyser) return;
+        analyser.getByteTimeDomainData(dataArray);
+
+        canvasCtx.fillStyle = "rgb(15, 23, 42)";
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+        canvasCtx.lineWidth = 2;
+        canvasCtx.strokeStyle = isRecording ? "#ef4444" : "#22c55e";
+        canvasCtx.beginPath();
+
+        const sliceWidth = (canvas.width * 1.0) / dataArray.length;
+        let x = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = dataArray[i] / 128.0;
+          const y = (v * canvas.height) / 2;
+          if (i === 0) canvasCtx.moveTo(x, y);
+          else canvasCtx.lineTo(x, y);
+          x += sliceWidth;
+        }
+        canvasCtx.lineTo(canvas.width, canvas.height / 2);
+        canvasCtx.stroke();
+      }
+
+      function startRecording() {
+        if (audioContext.state === "suspended") audioContext.resume();
+
+        audioChunks = []; // Clear current chunks
+        const options = { mimeType: "audio/wav" };
+        const processedStream = destinationNode.stream;
+
+        try {
+          mediaRecorder = new MediaRecorder(processedStream, options);
+        } catch (e) {
+          mediaRecorder = new MediaRecorder(processedStream);
+        }
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = saveRecording;
+
+        mediaRecorder.start();
+        isRecording = true;
+        updateUIState();
+        startTimer();
+      }
+
+      function stopRecording() {
+        mediaRecorder.stop();
+        isRecording = false;
+        updateUIState();
+        stopTimer();
+      }
+
+      function saveRecording() {
+        // Create Blob from captured chunks
+        const blob = new Blob(audioChunks, { type: "audio/wav" });
+        const timestamp = new Date();
+        const name = `Track ${timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+        const id = crypto.randomUUID(); // Unique ID for DB
+
+        // Save to UI
+        const url = URL.createObjectURL(blob);
+        addRecordingToUI(url, name, timestamp, id, true);
+
+        // Save to DB
+        saveToDB({
+          id: id,
+          blob: blob,
+          name: name,
+          date: timestamp.toISOString(),
+        });
+      }
+
+      function updateUIState() {
+        if (isRecording) {
+          recordBtn.classList.remove(
+            "bg-red-600",
+            "hover:bg-red-700",
+            "border-white",
+          );
+          recordBtn.classList.add(
+            "bg-slate-800",
+            "hover:bg-slate-900",
+            "recording-pulse",
+            "border-slate-800",
+          );
+          btnText.textContent = "Stop";
+          btnIcon.innerHTML = `<div class="w-8 h-8 bg-red-500 rounded-sm"></div>`;
+          instructionText.textContent = "Recording in progress...";
+          timerDisplay.classList.remove("opacity-0");
+          audioSelect.disabled = true;
+        } else {
+          recordBtn.classList.add(
+            "bg-red-600",
+            "hover:bg-red-700",
+            "border-white",
+          );
+          recordBtn.classList.remove(
+            "bg-slate-800",
+            "hover:bg-slate-900",
+            "recording-pulse",
+            "border-slate-800",
+          );
+          btnText.textContent = "Record";
+          btnIcon.innerHTML = `<div class="w-6 h-6 bg-white rounded-full"></div>`;
+          instructionText.textContent = "Ready to record.";
+          timerDisplay.classList.add("opacity-0");
+          audioSelect.disabled = false;
+        }
+      }
+
+      function startTimer() {
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+          const delta = Date.now() - startTime;
+          const seconds = Math.floor((delta / 1000) % 60);
+          const minutes = Math.floor((delta / (1000 * 60)) % 60);
+          timerDisplay.textContent = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+        }, 1000);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        timerDisplay.textContent = "00:00";
+      }
+
+      function addRecordingToUI(url, defaultName, dateObj, id, animate) {
+        toggleEmptyState(false);
+        const template = document.getElementById("recording-template");
+        const clone = template.content.cloneNode(true);
+        const list = document.getElementById("recordingsList");
+
+        const item = clone.querySelector(".recording-item");
+        item.dataset.id = id;
+        if (!animate) item.classList.remove("animate-fade-in");
+
+        const nameEl = clone.querySelector(".recording-name");
+        const dateEl = clone.querySelector(".recording-date");
+        const audioEl = clone.querySelector("audio");
+        const playBtn = clone.querySelector(".play-btn");
+        const dlBtn = clone.querySelector(".download-btn");
+        const delBtn = clone.querySelector(".delete-btn");
+
+        const dateStr = dateObj.toLocaleDateString();
+        const filename = `Guitar_${dateObj.getFullYear()}-${dateObj.getMonth() + 1}-${dateObj.getDate()}_${dateObj.getHours()}-${dateObj.getMinutes()}.wav`;
+
+        nameEl.textContent = defaultName;
+        dateEl.textContent = dateStr;
+        audioEl.src = url;
+        dlBtn.href = url;
+        dlBtn.download = filename;
+
+        playBtn.onclick = () => {
+          if (audioEl.paused) {
+            document.querySelectorAll("audio").forEach((a) => {
+              if (a !== audioEl) {
+                a.pause();
+                a.currentTime = 0;
+              }
+            });
+            audioEl.play();
+          } else {
+            audioEl.pause();
+          }
+        };
+
+        audioEl.onplay = () => {
+          playBtn.innerHTML = `<i data-lucide="square" class="w-4 h-4"></i> Stop`;
+          playBtn.classList.add(
+            "bg-blue-50",
+            "text-blue-600",
+            "border-blue-200",
+          );
+          lucide.createIcons();
+        };
+
+        audioEl.onpause = () => {
+          playBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Play`;
+          playBtn.classList.remove(
+            "bg-blue-50",
+            "text-blue-600",
+            "border-blue-200",
+          );
+          lucide.createIcons();
+        };
+
+        delBtn.onclick = (e) => {
+          if (confirm("Delete this recording?")) {
+            const item = e.target.closest(".recording-item");
+            const idToDelete = item.dataset.id;
+            item.remove();
+            deleteFromDB(idToDelete);
+          }
+        };
+
+        list.prepend(clone);
+        lucide.createIcons();
+      }
+
+      // --- Volume Listeners ---
+      vol1Slider.addEventListener("input", (e) => {
+        const val = e.target.value;
+        if (gainNode1) gainNode1.gain.value = val;
+        vol1Display.textContent = Math.round(val * 100) + "%";
+      });
+
+      vol2Slider.addEventListener("input", (e) => {
+        const val = e.target.value;
+        if (gainNode2) gainNode2.gain.value = val;
+        vol2Display.textContent = Math.round(val * 100) + "%";
+      });
+
+      recordBtn.addEventListener("click", () => {
+        if (!isRecording) startRecording();
+        else stopRecording();
+      });
+
+      audioSelect.addEventListener("change", (e) =>
+        startStream(e.target.value),
+      );
+
+      init();
+    </script>
+  </body>
+</html>
