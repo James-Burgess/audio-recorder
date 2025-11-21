@@ -1,0 +1,1218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi-Track Recorder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      /* Custom Animations */
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.8);
+          opacity: 0.5;
+        }
+        100% {
+          transform: scale(1.3);
+          opacity: 0;
+        }
+      }
+      .recording-pulse::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #ef4444;
+        border-radius: 50%;
+        z-index: -1;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      }
+      @keyframes beat-flash {
+        0%, 100% {
+          opacity: 0.2;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .beat-flash {
+        animation: beat-flash 0.1s ease-in-out;
+      }
+      /* Custom Range Slider Styling */
+      input[type="range"] {
+        -webkit-appearance: none;
+        background: transparent;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: pointer;
+        margin-top: -8px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: #cbd5e1;
+        border-radius: 2px;
+      }
+      /* Scrollbar styling */
+      ::-webkit-scrollbar {
+        width: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f8fafc;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-slate-50 text-slate-900 font-sans h-screen flex flex-col overflow-hidden"
+  >
+    <!-- Header: Transport Controls -->
+    <header class="bg-white shadow-sm border-b border-slate-200 flex-none z-10">
+      <div class="container mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <h1 class="text-2xl font-bold text-slate-800 tracking-tight">
+            Multi-Track Recorder
+          </h1>
+
+          <!-- Input Select -->
+          <div class="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 border border-slate-200">
+            <i data-lucide="mic" class="w-4 h-4 text-slate-500"></i>
+            <select
+              id="audioSource"
+              class="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer min-w-[200px]"
+            >
+              <option value="" disabled selected>Loading microphones...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Transport Controls -->
+        <div class="flex items-center gap-3">
+          <button
+            id="recordBtn"
+            class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all disabled:opacity-50"
+            title="Record New Track"
+          >
+            <i data-lucide="circle" class="w-5 h-5"></i>
+            <span>Record</span>
+          </button>
+          <button
+            id="playBtn"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
+            title="Play All Tracks"
+          >
+            <i data-lucide="play" class="w-5 h-5"></i>
+            <span>Play</span>
+          </button>
+          <button
+            id="stopBtn"
+            class="bg-slate-600 hover:bg-slate-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
+            title="Stop Playback"
+          >
+            <i data-lucide="square" class="w-5 h-5"></i>
+            <span>Stop</span>
+          </button>
+          <div class="w-px h-8 bg-slate-300"></div>
+          <button
+            id="exportBtn"
+            class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
+            title="Export Mixed Track"
+          >
+            <i data-lucide="download" class="w-5 h-5"></i>
+            <span>Export</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <a
+            href="index.html"
+            class="text-xs text-blue-600 hover:text-blue-700 font-semibold uppercase tracking-wider bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-all"
+          >
+            Simple
+          </a>
+          <span id="statusMsg" class="text-xs text-slate-500 font-medium">
+            Initializing...
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex flex-row overflow-hidden">
+      <!-- Left: Track List -->
+      <section class="flex-1 flex flex-col p-6 bg-slate-50 overflow-y-auto">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-slate-700 flex items-center gap-2">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+            Tracks
+          </h2>
+          <button
+            id="addTrackBtn"
+            class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all text-sm"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Add Track
+          </button>
+        </div>
+
+        <div id="tracksList" class="flex flex-col gap-4">
+          <!-- Tracks will be added here dynamically -->
+          <div id="emptyTracksState" class="text-center py-20 text-slate-400">
+            <i data-lucide="disc-3" class="w-16 h-16 mx-auto mb-3 opacity-50"></i>
+            <p class="text-lg font-medium mb-1">No tracks yet</p>
+            <p class="text-sm">Click "Add Track" or "Record" to start</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Master Controls -->
+      <aside class="w-96 bg-white border-l border-slate-200 flex flex-col flex-none shadow-xl">
+        <!-- Input Monitor -->
+        <div class="p-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="signal" class="w-5 h-5"></i>
+            Input Monitor
+          </h3>
+          <div class="w-full h-24 bg-slate-900 rounded-lg overflow-hidden relative shadow-inner mb-3">
+            <canvas id="inputVisualizer" class="w-full h-full"></canvas>
+          </div>
+          <!-- Input Volume Controls -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex flex-col gap-2">
+              <label class="text-xs font-bold text-slate-600">Input 1</label>
+              <input
+                type="range"
+                id="inputVol1"
+                min="0"
+                max="2"
+                step="0.1"
+                value="1"
+                class="w-full"
+              />
+              <span id="inputVol1Display" class="text-xs text-center font-mono text-blue-600">100%</span>
+            </div>
+            <div class="flex flex-col gap-2">
+              <label class="text-xs font-bold text-slate-600">Input 2</label>
+              <input
+                type="range"
+                id="inputVol2"
+                min="0"
+                max="2"
+                step="0.1"
+                value="1"
+                class="w-full"
+              />
+              <span id="inputVol2Display" class="text-xs text-center font-mono text-blue-600">100%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metronome -->
+        <div class="p-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="timer" class="w-5 h-5"></i>
+            Metronome
+          </h3>
+          <div class="flex items-center gap-3 mb-3">
+            <button
+              id="metronomeToggle"
+              class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition-all flex-1"
+            >
+              Off
+            </button>
+            <div class="flex items-center gap-2">
+              <input
+                type="number"
+                id="bpmInput"
+                min="40"
+                max="240"
+                value="120"
+                class="w-20 px-3 py-2 border border-slate-300 rounded-lg text-center font-mono"
+              />
+              <span class="text-sm font-medium text-slate-600">BPM</span>
+            </div>
+          </div>
+          <div class="flex justify-center">
+            <div
+              id="metronomeBeat"
+              class="w-12 h-12 rounded-full bg-slate-200"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Master Volume -->
+        <div class="p-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="volume-2" class="w-5 h-5"></i>
+            Master Volume
+          </h3>
+          <input
+            type="range"
+            id="masterVolume"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.8"
+            class="w-full mb-2"
+          />
+          <div class="text-center text-sm font-mono text-blue-600" id="masterVolumeDisplay">80%</div>
+        </div>
+
+        <!-- Project Info -->
+        <div class="p-4 flex-grow overflow-y-auto">
+          <h3 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="folder" class="w-5 h-5"></i>
+            Project
+          </h3>
+          <div class="text-sm text-slate-600 space-y-2">
+            <div class="flex justify-between">
+              <span>Tracks:</span>
+              <span id="trackCount" class="font-mono">0</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Status:</span>
+              <span id="projectStatus" class="font-mono">Ready</span>
+            </div>
+          </div>
+          <button
+            id="clearProjectBtn"
+            class="w-full mt-4 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg font-medium transition-all text-sm"
+          >
+            Clear All Tracks
+          </button>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Track Template -->
+    <template id="track-template">
+      <div class="track-item bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-all" data-track-id="">
+        <!-- Track Header -->
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3 flex-1">
+            <div class="bg-blue-100 p-2 rounded-lg">
+              <i data-lucide="music" class="w-5 h-5 text-blue-600"></i>
+            </div>
+            <div class="flex-1">
+              <input
+                type="text"
+                class="track-name font-semibold text-slate-800 bg-transparent border-none outline-none w-full"
+                value="Track"
+                placeholder="Track Name"
+              />
+              <p class="text-xs text-slate-500 track-info">Empty</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="track-solo-btn text-slate-400 hover:text-yellow-500 p-2 rounded-lg hover:bg-yellow-50 transition-all" title="Solo">
+              <i data-lucide="headphones" class="w-4 h-4"></i>
+            </button>
+            <button class="track-mute-btn text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-all" title="Mute">
+              <i data-lucide="volume-x" class="w-4 h-4"></i>
+            </button>
+            <button class="track-delete-btn text-slate-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-all" title="Delete">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Waveform Visualizer -->
+        <div class="w-full h-20 bg-slate-900 rounded-lg mb-3 overflow-hidden">
+          <canvas class="track-visualizer w-full h-full"></canvas>
+        </div>
+
+        <!-- Track Controls - Compact Layout -->
+        <div class="space-y-2">
+          <!-- Row 1: Volume & Pan -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">Vol</label>
+              <input type="range" class="track-volume flex-1" min="0" max="2" step="0.01" value="1" />
+              <span class="track-volume-display text-xs font-mono text-blue-600 w-10 text-right">100%</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">Pan</label>
+              <input type="range" class="track-pan flex-1" min="-1" max="1" step="0.01" value="0" />
+              <span class="track-pan-display text-xs font-mono text-blue-600 w-10 text-right">C</span>
+            </div>
+          </div>
+
+          <!-- Row 2: EQ Low & Mid -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">Low</label>
+              <input type="range" class="track-eq-low flex-1" min="-12" max="12" step="1" value="0" />
+              <span class="track-eq-low-display text-xs font-mono text-blue-600 w-10 text-right">0dB</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">Mid</label>
+              <input type="range" class="track-eq-mid flex-1" min="-12" max="12" step="1" value="0" />
+              <span class="track-eq-mid-display text-xs font-mono text-blue-600 w-10 text-right">0dB</span>
+            </div>
+          </div>
+
+          <!-- Row 3: EQ High & Reverb -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">High</label>
+              <input type="range" class="track-eq-high flex-1" min="-12" max="12" step="1" value="0" />
+              <span class="track-eq-high-display text-xs font-mono text-blue-600 w-10 text-right">0dB</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-slate-700 w-12">Reverb</label>
+              <input type="range" class="track-reverb flex-1" min="0" max="1" step="0.01" value="0" />
+              <span class="track-reverb-display text-xs font-mono text-blue-600 w-10 text-right">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <script>
+      // Initialize Lucide icons
+      lucide.createIcons();
+
+      // --- Elements ---
+      const audioSelect = document.getElementById("audioSource");
+      const recordBtn = document.getElementById("recordBtn");
+      const playBtn = document.getElementById("playBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const exportBtn = document.getElementById("exportBtn");
+      const addTrackBtn = document.getElementById("addTrackBtn");
+      const tracksList = document.getElementById("tracksList");
+      const emptyTracksState = document.getElementById("emptyTracksState");
+      const statusMsg = document.getElementById("statusMsg");
+      const trackCount = document.getElementById("trackCount");
+      const projectStatus = document.getElementById("projectStatus");
+      const clearProjectBtn = document.getElementById("clearProjectBtn");
+      const metronomeToggle = document.getElementById("metronomeToggle");
+      const bpmInput = document.getElementById("bpmInput");
+      const metronomeBeat = document.getElementById("metronomeBeat");
+      const masterVolume = document.getElementById("masterVolume");
+      const masterVolumeDisplay = document.getElementById("masterVolumeDisplay");
+      const inputVisualizer = document.getElementById("inputVisualizer");
+      const inputVisualizerCtx = inputVisualizer.getContext("2d");
+      const inputVol1 = document.getElementById("inputVol1");
+      const inputVol2 = document.getElementById("inputVol2");
+      const inputVol1Display = document.getElementById("inputVol1Display");
+      const inputVol2Display = document.getElementById("inputVol2Display");
+
+      // --- State ---
+      let audioContext;
+      let rawStream;
+      let sourceNode;
+      let splitterNode;
+      let gainNode1;
+      let gainNode2;
+      let mergerNode;
+      let inputAnalyser;
+      let inputDataArray;
+      let masterGainNode;
+
+      let tracks = [];
+      let isRecording = false;
+      let isPlaying = false;
+      let mediaRecorder;
+      let audioChunks = [];
+      let recordingTrackId = null;
+      let playbackStartTime = 0;
+      let metronomeEnabled = false;
+      let metronomeInterval = null;
+      let metronomeOscillator = null;
+      let metronomeBeatCount = 0;
+
+      // --- Initialization ---
+      async function init() {
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          statusMsg.textContent = "Ready";
+          statusMsg.className = "text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full";
+
+          await getDevices();
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioDevices = devices.filter(d => d.kind === "audioinput");
+
+          if (audioDevices.length > 0) {
+            await startStream(audioDevices[0].deviceId);
+          }
+        } catch (err) {
+          console.error("Error accessing microphone:", err);
+          statusMsg.textContent = "Mic Error";
+          statusMsg.className = "text-xs text-red-600 font-bold bg-red-100 px-2 py-1 rounded-full";
+        }
+      }
+
+      async function getDevices() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        audioSelect.innerHTML = "";
+        const audioDevices = devices.filter(d => d.kind === "audioinput");
+
+        if (audioDevices.length === 0) {
+          audioSelect.innerHTML = "<option>No microphones found</option>";
+          return;
+        }
+
+        audioDevices.forEach((device, idx) => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.text = device.label || `Microphone ${idx + 1}`;
+          audioSelect.appendChild(option);
+        });
+      }
+
+      async function startStream(deviceId) {
+        if (rawStream) {
+          rawStream.getTracks().forEach(track => track.stop());
+        }
+
+        const constraints = {
+          audio: {
+            deviceId: deviceId ? { exact: deviceId } : undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 2,
+          },
+        };
+
+        try {
+          rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+          setupAudioGraph(rawStream);
+        } catch (err) {
+          console.error("Error getting stream:", err);
+          statusMsg.textContent = "Connection Error";
+          statusMsg.className = "text-xs text-red-600 font-bold bg-red-100 px-2 py-1 rounded-full";
+        }
+      }
+
+      function setupAudioGraph(stream) {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Input processing chain
+        sourceNode = audioContext.createMediaStreamSource(stream);
+        splitterNode = audioContext.createChannelSplitter(2);
+        gainNode1 = audioContext.createGain();
+        gainNode2 = audioContext.createGain();
+        mergerNode = audioContext.createChannelMerger(2);
+        inputAnalyser = audioContext.createAnalyser();
+        masterGainNode = audioContext.createGain();
+
+        gainNode1.gain.value = inputVol1.value;
+        gainNode2.gain.value = inputVol2.value;
+        masterGainNode.gain.value = masterVolume.value;
+
+        // Connect input chain
+        sourceNode.connect(splitterNode);
+        splitterNode.connect(gainNode1, 0);
+        gainNode1.connect(mergerNode, 0, 0);
+        splitterNode.connect(gainNode2, 1);
+        gainNode2.connect(mergerNode, 0, 1);
+        mergerNode.connect(inputAnalyser);
+
+        inputAnalyser.fftSize = 2048;
+        const bufferLength = inputAnalyser.frequencyBinCount;
+        inputDataArray = new Uint8Array(bufferLength);
+
+        drawInputVisualizer();
+      }
+
+      function drawInputVisualizer() {
+        inputVisualizer.width = inputVisualizer.clientWidth;
+        inputVisualizer.height = inputVisualizer.clientHeight;
+        requestAnimationFrame(drawInputVisualizer);
+
+        if (!inputAnalyser) return;
+        inputAnalyser.getByteTimeDomainData(inputDataArray);
+
+        inputVisualizerCtx.fillStyle = "rgb(15, 23, 42)";
+        inputVisualizerCtx.fillRect(0, 0, inputVisualizer.width, inputVisualizer.height);
+        inputVisualizerCtx.lineWidth = 2;
+        inputVisualizerCtx.strokeStyle = isRecording ? "#ef4444" : "#22c55e";
+        inputVisualizerCtx.beginPath();
+
+        const sliceWidth = (inputVisualizer.width * 1.0) / inputDataArray.length;
+        let x = 0;
+        for (let i = 0; i < inputDataArray.length; i++) {
+          const v = inputDataArray[i] / 128.0;
+          const y = (v * inputVisualizer.height) / 2;
+          if (i === 0) inputVisualizerCtx.moveTo(x, y);
+          else inputVisualizerCtx.lineTo(x, y);
+          x += sliceWidth;
+        }
+        inputVisualizerCtx.lineTo(inputVisualizer.width, inputVisualizer.height / 2);
+        inputVisualizerCtx.stroke();
+      }
+
+      // --- Track Management ---
+      function addTrack(audioBlob = null, trackName = null) {
+        const trackId = crypto.randomUUID();
+        const template = document.getElementById("track-template");
+        const clone = template.content.cloneNode(true);
+        const trackElement = clone.querySelector(".track-item");
+
+        trackElement.dataset.trackId = trackId;
+
+        const nameInput = clone.querySelector(".track-name");
+        const trackInfo = clone.querySelector(".track-info");
+        const visualizerCanvas = clone.querySelector(".track-visualizer");
+        const volumeSlider = clone.querySelector(".track-volume");
+        const panSlider = clone.querySelector(".track-pan");
+        const eqLowSlider = clone.querySelector(".track-eq-low");
+        const eqMidSlider = clone.querySelector(".track-eq-mid");
+        const eqHighSlider = clone.querySelector(".track-eq-high");
+        const reverbSlider = clone.querySelector(".track-reverb");
+        const soloBtn = clone.querySelector(".track-solo-btn");
+        const muteBtn = clone.querySelector(".track-mute-btn");
+        const deleteBtn = clone.querySelector(".track-delete-btn");
+
+        // Get display elements
+        const volumeDisplay = clone.querySelector(".track-volume-display");
+        const panDisplay = clone.querySelector(".track-pan-display");
+        const eqLowDisplay = clone.querySelector(".track-eq-low-display");
+        const eqMidDisplay = clone.querySelector(".track-eq-mid-display");
+        const eqHighDisplay = clone.querySelector(".track-eq-high-display");
+        const reverbDisplay = clone.querySelector(".track-reverb-display");
+
+        const trackNumber = tracks.length + 1;
+        nameInput.value = trackName || `Track ${trackNumber}`;
+
+        const track = {
+          id: trackId,
+          element: trackElement,
+          audioBlob: audioBlob,
+          audioBuffer: null,
+          sourceNode: null,
+          gainNode: null,
+          panNode: null,
+          eqLow: null,
+          eqMid: null,
+          eqHigh: null,
+          reverbGain: null,
+          isMuted: false,
+          isSolo: false,
+          volume: 1,
+          pan: 0,
+          name: nameInput.value,
+        };
+
+        // Setup controls
+        volumeSlider.addEventListener("input", (e) => {
+          track.volume = parseFloat(e.target.value);
+          if (track.gainNode) track.gainNode.gain.value = track.volume;
+          volumeDisplay.textContent = Math.round(track.volume * 100) + "%";
+        });
+
+        panSlider.addEventListener("input", (e) => {
+          track.pan = parseFloat(e.target.value);
+          if (track.panNode) track.panNode.pan.value = track.pan;
+          if (track.pan < -0.05) panDisplay.textContent = "L" + Math.abs(Math.round(track.pan * 100));
+          else if (track.pan > 0.05) panDisplay.textContent = "R" + Math.round(track.pan * 100);
+          else panDisplay.textContent = "C";
+        });
+
+        eqLowSlider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          if (track.eqLow) track.eqLow.gain.value = val;
+          eqLowDisplay.textContent = (val >= 0 ? "+" : "") + val + "dB";
+        });
+
+        eqMidSlider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          if (track.eqMid) track.eqMid.gain.value = val;
+          eqMidDisplay.textContent = (val >= 0 ? "+" : "") + val + "dB";
+        });
+
+        eqHighSlider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          if (track.eqHigh) track.eqHigh.gain.value = val;
+          eqHighDisplay.textContent = (val >= 0 ? "+" : "") + val + "dB";
+        });
+
+        reverbSlider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          if (track.reverbGain) track.reverbGain.gain.value = val;
+          reverbDisplay.textContent = Math.round(val * 100) + "%";
+        });
+
+        muteBtn.addEventListener("click", () => {
+          track.isMuted = !track.isMuted;
+          if (track.isMuted) {
+            muteBtn.classList.add("text-red-600", "bg-red-50");
+          } else {
+            muteBtn.classList.remove("text-red-600", "bg-red-50");
+          }
+          if (track.gainNode) {
+            track.gainNode.gain.value = track.isMuted ? 0 : track.volume;
+          }
+        });
+
+        soloBtn.addEventListener("click", () => {
+          track.isSolo = !track.isSolo;
+          if (track.isSolo) {
+            soloBtn.classList.add("text-yellow-600", "bg-yellow-50");
+            tracks.forEach(t => {
+              if (t.id !== track.id && t.gainNode) {
+                t.gainNode.gain.value = 0;
+              }
+            });
+          } else {
+            soloBtn.classList.remove("text-yellow-600", "bg-yellow-50");
+            tracks.forEach(t => {
+              if (t.gainNode && !t.isMuted) {
+                t.gainNode.gain.value = t.volume;
+              }
+            });
+          }
+        });
+
+        deleteBtn.addEventListener("click", () => {
+          if (confirm("Delete this track?")) {
+            deleteTrack(trackId);
+          }
+        });
+
+        nameInput.addEventListener("change", () => {
+          track.name = nameInput.value;
+        });
+
+        tracks.push(track);
+        tracksList.appendChild(clone);
+        emptyTracksState.classList.add("hidden");
+        updateTrackCount();
+        lucide.createIcons();
+
+        if (audioBlob) {
+          trackInfo.textContent = "Loading...";
+          loadAudioToTrack(track, audioBlob);
+        }
+
+        return track;
+      }
+
+      async function loadAudioToTrack(track, audioBlob) {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        track.audioBuffer = audioBuffer;
+
+        const trackInfo = track.element.querySelector(".track-info");
+        const duration = audioBuffer.duration.toFixed(1);
+        trackInfo.textContent = `${duration}s`;
+
+        drawTrackWaveform(track);
+      }
+
+      function drawTrackWaveform(track) {
+        if (!track.audioBuffer) return;
+
+        const canvas = track.element.querySelector(".track-visualizer");
+        const ctx = canvas.getContext("2d");
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+
+        const data = track.audioBuffer.getChannelData(0);
+        const step = Math.ceil(data.length / canvas.width);
+        const amp = canvas.height / 2;
+
+        ctx.fillStyle = "rgb(15, 23, 42)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+
+        for (let i = 0; i < canvas.width; i++) {
+          let min = 1.0;
+          let max = -1.0;
+          for (let j = 0; j < step; j++) {
+            const datum = data[(i * step) + j];
+            if (datum < min) min = datum;
+            if (datum > max) max = datum;
+          }
+          ctx.moveTo(i, (1 + min) * amp);
+          ctx.lineTo(i, (1 + max) * amp);
+        }
+        ctx.stroke();
+      }
+
+      function deleteTrack(trackId) {
+        const index = tracks.findIndex(t => t.id === trackId);
+        if (index === -1) return;
+
+        const track = tracks[index];
+        if (track.sourceNode) track.sourceNode.stop();
+        track.element.remove();
+        tracks.splice(index, 1);
+
+        if (tracks.length === 0) {
+          emptyTracksState.classList.remove("hidden");
+        }
+        updateTrackCount();
+      }
+
+      function updateTrackCount() {
+        trackCount.textContent = tracks.length;
+      }
+
+      // --- Recording ---
+      function startRecording() {
+        if (audioContext.state === "suspended") audioContext.resume();
+
+        const newTrack = addTrack();
+        recordingTrackId = newTrack.id;
+
+        audioChunks = [];
+        const destinationNode = audioContext.createMediaStreamDestination();
+        mergerNode.connect(destinationNode);
+
+        const options = { mimeType: "audio/wav" };
+        try {
+          mediaRecorder = new MediaRecorder(destinationNode.stream, options);
+        } catch (e) {
+          mediaRecorder = new MediaRecorder(destinationNode.stream);
+        }
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(audioChunks, { type: "audio/wav" });
+          const track = tracks.find(t => t.id === recordingTrackId);
+          if (track) {
+            track.audioBlob = blob;
+            loadAudioToTrack(track, blob);
+          }
+          isRecording = false;
+          recordBtn.innerHTML = '<i data-lucide="circle" class="w-5 h-5"></i><span>Record</span>';
+          recordBtn.classList.remove("bg-slate-800");
+          recordBtn.classList.add("bg-red-600");
+          projectStatus.textContent = "Ready";
+          lucide.createIcons();
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.innerHTML = '<i data-lucide="square" class="w-5 h-5"></i><span>Stop Rec</span>';
+        recordBtn.classList.remove("bg-red-600");
+        recordBtn.classList.add("bg-slate-800");
+        projectStatus.textContent = "Recording...";
+        lucide.createIcons();
+
+        // If other tracks exist, start playing them
+        if (tracks.length > 1) {
+          playAllTracks();
+        }
+      }
+
+      function stopRecording() {
+        if (mediaRecorder && isRecording) {
+          mediaRecorder.stop();
+          stopAllTracks();
+        }
+      }
+
+      // --- Playback ---
+      function playAllTracks() {
+        if (isPlaying) return;
+        if (tracks.length === 0) return;
+
+        isPlaying = true;
+        playbackStartTime = audioContext.currentTime;
+        projectStatus.textContent = "Playing...";
+        playBtn.classList.add("bg-blue-800");
+
+        tracks.forEach(track => {
+          if (!track.audioBuffer) return;
+
+          // Create audio graph for this track
+          const source = audioContext.createBufferSource();
+          source.buffer = track.audioBuffer;
+
+          const gainNode = audioContext.createGain();
+          const panNode = audioContext.createStereoPanner();
+
+          // EQ nodes
+          const eqLow = audioContext.createBiquadFilter();
+          eqLow.type = "lowshelf";
+          eqLow.frequency.value = 200;
+
+          const eqMid = audioContext.createBiquadFilter();
+          eqMid.type = "peaking";
+          eqMid.frequency.value = 1000;
+          eqMid.Q.value = 1;
+
+          const eqHigh = audioContext.createBiquadFilter();
+          eqHigh.type = "highshelf";
+          eqHigh.frequency.value = 3000;
+
+          // Reverb (simple delay-based)
+          const reverbGain = audioContext.createGain();
+          reverbGain.gain.value = 0;
+
+          // Connect nodes
+          source.connect(eqLow);
+          eqLow.connect(eqMid);
+          eqMid.connect(eqHigh);
+          eqHigh.connect(gainNode);
+          gainNode.connect(panNode);
+          panNode.connect(masterGainNode);
+          masterGainNode.connect(audioContext.destination);
+
+          // Apply current settings
+          gainNode.gain.value = track.isMuted ? 0 : track.volume;
+          panNode.pan.value = track.pan;
+
+          const eqLowSlider = track.element.querySelector(".track-eq-low");
+          const eqMidSlider = track.element.querySelector(".track-eq-mid");
+          const eqHighSlider = track.element.querySelector(".track-eq-high");
+
+          eqLow.gain.value = parseFloat(eqLowSlider.value);
+          eqMid.gain.value = parseFloat(eqMidSlider.value);
+          eqHigh.gain.value = parseFloat(eqHighSlider.value);
+
+          track.sourceNode = source;
+          track.gainNode = gainNode;
+          track.panNode = panNode;
+          track.eqLow = eqLow;
+          track.eqMid = eqMid;
+          track.eqHigh = eqHigh;
+          track.reverbGain = reverbGain;
+
+          source.onended = () => {
+            if (!isRecording) {
+              isPlaying = false;
+              projectStatus.textContent = "Ready";
+              playBtn.classList.remove("bg-blue-800");
+            }
+          };
+
+          source.start(0);
+        });
+      }
+
+      function stopAllTracks() {
+        tracks.forEach(track => {
+          if (track.sourceNode) {
+            try {
+              track.sourceNode.stop();
+            } catch (e) {}
+            track.sourceNode = null;
+          }
+        });
+        isPlaying = false;
+        projectStatus.textContent = "Ready";
+        playBtn.classList.remove("bg-blue-800");
+      }
+
+      // --- Metronome ---
+      function toggleMetronome() {
+        metronomeEnabled = !metronomeEnabled;
+
+        if (metronomeEnabled) {
+          metronomeToggle.textContent = "On";
+          metronomeToggle.classList.add("bg-blue-600", "text-white");
+          metronomeToggle.classList.remove("bg-slate-100", "text-slate-700");
+          startMetronome();
+        } else {
+          metronomeToggle.textContent = "Off";
+          metronomeToggle.classList.remove("bg-blue-600", "text-white");
+          metronomeToggle.classList.add("bg-slate-100", "text-slate-700");
+          stopMetronome();
+        }
+      }
+
+      function startMetronome() {
+        const bpm = parseInt(bpmInput.value);
+        const interval = 60000 / bpm;
+
+        metronomeBeatCount = 0;
+        metronomeInterval = setInterval(() => {
+          playMetronomeClick();
+          metronomeBeatCount++;
+
+          // Visual feedback
+          metronomeBeat.classList.remove("beat-flash");
+          if (metronomeBeatCount % 4 === 1) {
+            metronomeBeat.classList.add("bg-red-500");
+          } else {
+            metronomeBeat.classList.add("bg-blue-500");
+          }
+
+          setTimeout(() => {
+            metronomeBeat.classList.add("beat-flash");
+            metronomeBeat.classList.remove("bg-red-500", "bg-blue-500");
+            metronomeBeat.classList.add("bg-slate-200");
+          }, 50);
+        }, interval);
+      }
+
+      function stopMetronome() {
+        if (metronomeInterval) {
+          clearInterval(metronomeInterval);
+          metronomeInterval = null;
+        }
+      }
+
+      function playMetronomeClick() {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+
+        if (metronomeBeatCount % 4 === 0) {
+          osc.frequency.value = 1000;
+        } else {
+          osc.frequency.value = 800;
+        }
+
+        gain.gain.value = 0.3;
+        osc.start(audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+        osc.stop(audioContext.currentTime + 0.05);
+      }
+
+      // --- Export ---
+      async function exportMix() {
+        if (tracks.length === 0) {
+          alert("No tracks to export!");
+          return;
+        }
+
+        projectStatus.textContent = "Exporting...";
+        exportBtn.disabled = true;
+
+        // Find longest track duration
+        let maxDuration = 0;
+        tracks.forEach(track => {
+          if (track.audioBuffer && track.audioBuffer.duration > maxDuration) {
+            maxDuration = track.audioBuffer.duration;
+          }
+        });
+
+        // Create offline context for rendering
+        const offlineContext = new OfflineAudioContext(
+          2,
+          audioContext.sampleRate * maxDuration,
+          audioContext.sampleRate
+        );
+
+        const offlineMaster = offlineContext.createGain();
+        offlineMaster.gain.value = masterGainNode.gain.value;
+        offlineMaster.connect(offlineContext.destination);
+
+        // Add all tracks to offline context
+        tracks.forEach(track => {
+          if (!track.audioBuffer) return;
+
+          const source = offlineContext.createBufferSource();
+          source.buffer = track.audioBuffer;
+
+          const gainNode = offlineContext.createGain();
+          const panNode = offlineContext.createStereoPanner();
+
+          const eqLow = offlineContext.createBiquadFilter();
+          eqLow.type = "lowshelf";
+          eqLow.frequency.value = 200;
+
+          const eqMid = offlineContext.createBiquadFilter();
+          eqMid.type = "peaking";
+          eqMid.frequency.value = 1000;
+          eqMid.Q.value = 1;
+
+          const eqHigh = offlineContext.createBiquadFilter();
+          eqHigh.type = "highshelf";
+          eqHigh.frequency.value = 3000;
+
+          source.connect(eqLow);
+          eqLow.connect(eqMid);
+          eqMid.connect(eqHigh);
+          eqHigh.connect(gainNode);
+          gainNode.connect(panNode);
+          panNode.connect(offlineMaster);
+
+          gainNode.gain.value = track.isMuted ? 0 : track.volume;
+          panNode.pan.value = track.pan;
+
+          const eqLowSlider = track.element.querySelector(".track-eq-low");
+          const eqMidSlider = track.element.querySelector(".track-eq-mid");
+          const eqHighSlider = track.element.querySelector(".track-eq-high");
+
+          eqLow.gain.value = parseFloat(eqLowSlider.value);
+          eqMid.gain.value = parseFloat(eqMidSlider.value);
+          eqHigh.gain.value = parseFloat(eqHighSlider.value);
+
+          source.start(0);
+        });
+
+        try {
+          const renderedBuffer = await offlineContext.startRendering();
+          const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+
+          const url = URL.createObjectURL(wavBlob);
+          const a = document.createElement("a");
+          const timestamp = new Date();
+          const filename = `Mix_${timestamp.getFullYear()}-${timestamp.getMonth() + 1}-${timestamp.getDate()}_${timestamp.getHours()}-${timestamp.getMinutes()}.wav`;
+
+          a.href = url;
+          a.download = filename;
+          a.click();
+
+          projectStatus.textContent = "Export Complete!";
+          setTimeout(() => {
+            projectStatus.textContent = "Ready";
+          }, 2000);
+        } catch (err) {
+          console.error("Export error:", err);
+          alert("Export failed!");
+          projectStatus.textContent = "Export Failed";
+        }
+
+        exportBtn.disabled = false;
+      }
+
+      function bufferToWave(abuffer, len) {
+        const numOfChan = abuffer.numberOfChannels;
+        const length = len * numOfChan * 2 + 44;
+        const buffer = new ArrayBuffer(length);
+        const view = new DataView(buffer);
+        const channels = [];
+        let offset = 0;
+        let pos = 0;
+
+        // Write WAVE header
+        setUint32(0x46464952); // "RIFF"
+        setUint32(length - 8); // file length - 8
+        setUint32(0x45564157); // "WAVE"
+        setUint32(0x20746d66); // "fmt " chunk
+        setUint32(16); // length = 16
+        setUint16(1); // PCM (uncompressed)
+        setUint16(numOfChan);
+        setUint32(abuffer.sampleRate);
+        setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+        setUint16(numOfChan * 2); // block-align
+        setUint16(16); // 16-bit
+        setUint32(0x61746164); // "data" - chunk
+        setUint32(length - pos - 4); // chunk length
+
+        // Write interleaved data
+        for (let i = 0; i < abuffer.numberOfChannels; i++) {
+          channels.push(abuffer.getChannelData(i));
+        }
+
+        while (pos < length) {
+          for (let i = 0; i < numOfChan; i++) {
+            let sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+          }
+          offset++;
+        }
+
+        return new Blob([buffer], { type: "audio/wav" });
+
+        function setUint16(data) {
+          view.setUint16(pos, data, true);
+          pos += 2;
+        }
+
+        function setUint32(data) {
+          view.setUint32(pos, data, true);
+          pos += 4;
+        }
+      }
+
+      // --- Event Listeners ---
+      recordBtn.addEventListener("click", () => {
+        if (!isRecording) {
+          startRecording();
+        } else {
+          stopRecording();
+        }
+      });
+
+      playBtn.addEventListener("click", () => {
+        if (!isPlaying) {
+          playAllTracks();
+        }
+      });
+
+      stopBtn.addEventListener("click", () => {
+        stopAllTracks();
+        if (isRecording) {
+          stopRecording();
+        }
+      });
+
+      exportBtn.addEventListener("click", exportMix);
+
+      addTrackBtn.addEventListener("click", () => {
+        addTrack();
+      });
+
+      clearProjectBtn.addEventListener("click", () => {
+        if (confirm("Delete all tracks? This cannot be undone.")) {
+          tracks.forEach(track => {
+            if (track.sourceNode) track.sourceNode.stop();
+            track.element.remove();
+          });
+          tracks = [];
+          emptyTracksState.classList.remove("hidden");
+          updateTrackCount();
+        }
+      });
+
+      metronomeToggle.addEventListener("click", toggleMetronome);
+
+      bpmInput.addEventListener("change", () => {
+        if (metronomeEnabled) {
+          stopMetronome();
+          startMetronome();
+        }
+      });
+
+      masterVolume.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        if (masterGainNode) masterGainNode.gain.value = val;
+        masterVolumeDisplay.textContent = Math.round(val * 100) + "%";
+      });
+
+      inputVol1.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        if (gainNode1) gainNode1.gain.value = val;
+        inputVol1Display.textContent = Math.round(val * 100) + "%";
+      });
+
+      inputVol2.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        if (gainNode2) gainNode2.gain.value = val;
+        inputVol2Display.textContent = Math.round(val * 100) + "%";
+      });
+
+      audioSelect.addEventListener("change", (e) => {
+        startStream(e.target.value);
+      });
+
+      // Initialize
+      init();
+    </script>
+  </body>
+</html>
